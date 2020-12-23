@@ -23,7 +23,7 @@ device = 'cuda'
 @st.cache(allow_output_mutation=True)
 def make_env():
     model = src.env_model.Model.load_from_checkpoint(
-        checkpoint_path='/workspace/src/env_model/epoch=1039.ckpt'
+        checkpoint_path='/workspace/outputs/Default/2020-12-22/18-55-40/copied/src/env_model/epoch=1039.ckpt'
     ).to(device)
     hparams = model.hparams
     model.eval()
@@ -202,7 +202,7 @@ def one_step(
             output_format='png',
         )
         if not done:
-            done = st.checkbox(f'Done on step {step}', value=True)
+            done = st.checkbox(f'Done on step {step}', value=step >= 8)
         else:
             st.write('Done')
     return done
@@ -233,22 +233,52 @@ def main():
 
     default_action = st.radio('Mode to select default action', ['RL', 'Minimum loss'])
 
-    if st.sidebar.radio('Mode to select', ['index', 'font & alphabet']) == 'index':
+    mode_to_select = st.sidebar.radio(
+        'Mode to select',
+        ['index', 'font index & alphabet index', 'font & alphabet'],
+    )
+    if mode_to_select == 'index':
         data_index = st.sidebar.number_input(
             f'Data index (0~{len(dataset)})', 0, len(dataset), value=0, step=1
         )
         st.sidebar.write(
-            f'Font: `{dataset.unique_font[dataset.index_to_font(data_index)]}`',
-            '\n',
-            f'Alphabet: `{dataset.unique_alphabet[dataset.index_to_alphabet(data_index)]}`',
+            f'Font: `{dataset.unique_font[dataset.index_to_font(data_index)]}`'
         )
-    else:
+        st.sidebar.write(
+            f'Alphabet: `{dataset.unique_alphabet[dataset.index_to_alphabet(data_index)]}`'
+        )
+    elif mode_to_select == 'font index & alphabet index':
+        font_index = st.sidebar.number_input(
+            f'Font index (0~{len(dataset.unique_font)})',
+            0,
+            len(dataset.unique_font),
+            value=0,
+            step=1,
+        )
+        alphabet_index = st.sidebar.number_input(
+            f'Alphabet index (0~{len(dataset.unique_alphabet)})',
+            0,
+            len(dataset.unique_alphabet),
+            value=0,
+            step=1,
+        )
+        data_index = dataset.font_alphabet_to_index(font_index, alphabet_index)
+        st.sidebar.write(f'Data index:', data_index)
+        st.sidebar.write(
+            f'Font: `{dataset.unique_font[dataset.index_to_font(data_index)]}`'
+        )
+        st.sidebar.write(
+            f'Alphabet: `{dataset.unique_alphabet[dataset.index_to_alphabet(data_index)]}`'
+        )
+    elif mode_to_select == 'font & alphabet':
         font = st.sidebar.selectbox('Font', dataset.unique_font)
         alphabet = st.sidebar.selectbox('Alphabet', dataset.unique_alphabet)
         font_index = dataset.unique_font.index(font)
         alphabet_index = dataset.unique_alphabet.index(alphabet)
         data_index = dataset.font_alphabet_to_index(font_index, alphabet_index)
         st.sidebar.write('Data index:', data_index)
+    else:
+        assert False
 
     _ = env.reset(data_index=data_index)
     image = env.data[0]
