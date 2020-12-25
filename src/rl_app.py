@@ -23,7 +23,7 @@ device = 'cuda'
 @st.cache(allow_output_mutation=True)
 def make_env():
     model = src.env_model.Model.load_from_checkpoint(
-        checkpoint_path='/workspace/outputs/Default/2020-12-22/18-55-40/copied/src/env_model/epoch=1039.ckpt'
+        checkpoint_path='/workspace/outputs/Default/2020-12-25/16-33-19__interrupted__/copied/src/env_model/epoch=1062.ckpt'
     ).to(device)
     hparams = model.hparams
     model.eval()
@@ -31,9 +31,7 @@ def make_env():
 
     image_size = 100
     patch_size = hparams.patch_size
-    feature_n = hparams.feature_n
-    output_n = 26
-    obs_size = output_n + 1
+    obs_size = 1 + 1
     n_actions = (image_size - patch_size) ** 2
     done_loss = 0
 
@@ -52,7 +50,7 @@ def make_env():
         lower=False,
     )
 
-    env = PatchSetsClassificationEnv(dataset, model, patch_size, feature_n, done_loss)
+    env = PatchSetsClassificationEnv(dataset, model, patch_size, done_loss)
     return env
 
 
@@ -60,7 +58,9 @@ def make_env():
 def make_agent(obs_size, n_actions, hidden_n, patch_size):
     model = src.agent_model.Model(obs_size, n_actions, hidden_n, patch_size).to(device)
     model.load_state_dict(
-        torch.load('/workspace/outputs/Default/2020-12-22/18-55-40/best/model.pt')
+        torch.load(
+            '/workspace/outputs/Default/2020-12-25/16-33-19__interrupted__/best/model.pt'
+        )
     )
     model.eval()
     summary(model)
@@ -99,9 +99,13 @@ def one_step(
     step: int,
     default_action_mode: str,
 ):
-    col_loss_map, col_rl_map, col_loss_dataflame, col_patch_select = st.beta_columns(
-        [4, 4, 3, 2]
-    )
+    (
+        col_loss_map,
+        col_state,
+        col_rl_map,
+        col_loss_dataflame,
+        col_patch_select,
+    ) = st.beta_columns([4, 2, 4, 3, 2])
 
     with col_loss_map:
         if step == 0:
@@ -130,6 +134,20 @@ def one_step(
         st.write('Loss map')
         fig = plt.figure()
         plt.imshow(loss_map.detach().cpu().numpy()[0])
+        plt.colorbar()
+        st.pyplot(fig, True)
+
+    with col_state:
+        obs = env.trajectory['observation'][-1]
+
+        st.write('State')
+        fig = plt.figure()
+        plt.imshow(obs[0].detach().cpu().numpy())
+        plt.colorbar()
+        st.pyplot(fig, True)
+
+        fig = plt.figure()
+        plt.imshow(obs[1].detach().cpu().numpy(), vmin=0, vmax=1)
         plt.colorbar()
         st.pyplot(fig, True)
 
@@ -202,7 +220,7 @@ def one_step(
             output_format='png',
         )
         if not done:
-            done = st.checkbox(f'Done on step {step}', value=step >= 8)
+            done = st.checkbox(f'Done on step {step}', value=((step + 1) % 8 == 0))
         else:
             st.write('Done')
     return done
@@ -221,10 +239,8 @@ def main():
 
     image_size = 100
     patch_size = env.model.hparams.patch_size
-    feature_n = env.model.hparams.feature_n
-    output_n = 26
 
-    obs_size = output_n + 1
+    obs_size = 1 + 1
     n_actions = (image_size - patch_size) ** 2
 
     agent_model = make_agent(obs_size, n_actions, 64, patch_size)
@@ -234,51 +250,43 @@ def main():
     default_action = st.radio('Mode to select default action', ['RL', 'Minimum loss'])
 
     mode_to_select = st.sidebar.radio(
-        'Mode to select',
-        ['index', 'font index & alphabet index', 'font & alphabet'],
+        'Mode to select', ['index', 'font index & alphabet index', 'font & alphabet'], 1
     )
     if mode_to_select == 'index':
         data_index = st.sidebar.number_input(
-            f'Data index (0~{len(dataset)})', 0, len(dataset), value=0, step=1
-        )
-        st.sidebar.write(
-            f'Font: `{dataset.unique_font[dataset.index_to_font(data_index)]}`'
-        )
-        st.sidebar.write(
-            f'Alphabet: `{dataset.unique_alphabet[dataset.index_to_alphabet(data_index)]}`'
+            f'Data index (0~{len(dataset)})', 0, len(dataset) - 1, value=0, step=1
         )
     elif mode_to_select == 'font index & alphabet index':
         font_index = st.sidebar.number_input(
             f'Font index (0~{len(dataset.unique_font)})',
             0,
-            len(dataset.unique_font),
-            value=0,
+            len(dataset.unique_font) - 1,
+            value=3,
             step=1,
         )
         alphabet_index = st.sidebar.number_input(
             f'Alphabet index (0~{len(dataset.unique_alphabet)})',
             0,
-            len(dataset.unique_alphabet),
+            len(dataset.unique_alphabet) - 1,
             value=0,
             step=1,
         )
         data_index = dataset.font_alphabet_to_index(font_index, alphabet_index)
-        st.sidebar.write(f'Data index:', data_index)
-        st.sidebar.write(
-            f'Font: `{dataset.unique_font[dataset.index_to_font(data_index)]}`'
-        )
-        st.sidebar.write(
-            f'Alphabet: `{dataset.unique_alphabet[dataset.index_to_alphabet(data_index)]}`'
-        )
     elif mode_to_select == 'font & alphabet':
         font = st.sidebar.selectbox('Font', dataset.unique_font)
         alphabet = st.sidebar.selectbox('Alphabet', dataset.unique_alphabet)
         font_index = dataset.unique_font.index(font)
         alphabet_index = dataset.unique_alphabet.index(alphabet)
         data_index = dataset.font_alphabet_to_index(font_index, alphabet_index)
-        st.sidebar.write('Data index:', data_index)
     else:
         assert False
+    st.sidebar.write(f'Data index:', data_index)
+    st.sidebar.write(
+        f'Font: `{dataset.index_to_font(data_index)}`, `{dataset.unique_font[dataset.index_to_font(data_index)]}`'
+    )
+    st.sidebar.write(
+        f'Alphabet: `{dataset.index_to_alphabet(data_index)}`, `{dataset.unique_alphabet[dataset.index_to_alphabet(data_index)]}`'
+    )
 
     _ = env.reset(data_index=data_index)
     image = env.data[0]
@@ -310,7 +318,7 @@ def main():
             **{
                 alphabet: data
                 for alphabet, data in zip(
-                    env.dataset.unique_alphabet,
+                    dataset.unique_alphabet,
                     torch.cat(env.trajectory['likelihood'], 0)
                     .softmax(1)
                     .T.detach()
@@ -320,6 +328,25 @@ def main():
         ),
     )
     st.sidebar.dataframe(df)
+
+    st.sidebar.write('accuracy')
+    accuracy_df = df[dataset.unique_alphabet]
+    fig = plt.figure()
+    plt.plot(
+        accuracy_df[dataset.unique_alphabet[target]],
+        color='black',
+        marker='o',
+        label=dataset.unique_alphabet[target],
+    )
+    top_acc_label = []
+    for _, row in accuracy_df.iterrows():
+        top_acc_label.extend(row.sort_values(ascending=False)[:2].index)
+    display_label = sorted(set(top_acc_label) - {dataset.unique_alphabet[target]})
+    for label in display_label:
+        plt.plot(accuracy_df[label], marker='.', label=label)
+    plt.ylim([0, 1])
+    plt.legend()
+    st.sidebar.pyplot(fig, True)
 
     st.sidebar.write('loss')
     fig = plt.figure()
