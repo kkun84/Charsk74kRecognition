@@ -249,39 +249,40 @@ def main(config):
 
     pl.seed_everything(config.seed)
 
-    device = st.selectbox('device', ['cpu', 'cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'])
+    with st.beta_expander('Setting'):
+        device = st.selectbox('device', ['cpu', 'cuda:0', 'cuda:1', 'cuda:2', 'cuda:3'])
 
-    st.write('## Select agent model')
-    agent_model_path_pattern = st.text_input(
-        'Agent model path pattern', value='**//**/*h/model'
-    )
-    agent_model_path_pattern = f'{agent_model_path_pattern}.pt'
-    path_list = sorted(
-        Path(hydra.utils.get_original_cwd()).glob(agent_model_path_pattern)
-    )
-    agent_model_path = st.selectbox(
-        f'Select agent model path from "{agent_model_path_pattern}"',
-        path_list,
-        index=len(path_list) - 1,
-    )
-    st.write(f'`{agent_model_path}`')
+        st.write('## Select agent model')
+        agent_model_path_pattern = st.text_input(
+            'Agent model path pattern', value='**//**/*h/model'
+        )
+        agent_model_path_pattern = f'{agent_model_path_pattern}.pt'
+        path_list = sorted(
+            Path(hydra.utils.get_original_cwd()).glob(agent_model_path_pattern)
+        )
+        agent_model_path = st.selectbox(
+            f'Select agent model path from "{agent_model_path_pattern}"',
+            path_list,
+            index=len(path_list) - 1,
+        )
+        st.write(f'`{agent_model_path}`')
 
-    st.write('## Select env model')
-    env_model_path_pattern = st.text_input(
-        'Env model path pattern', value='**//**/env_model*'
-    )
-    env_model_path_pattern = f'{env_model_path_pattern}.pth'
-    path_list = sorted(
-        Path(hydra.utils.get_original_cwd()).glob(env_model_path_pattern)
-    )
-    env_model_path = st.selectbox(
-        f'Select agent model path from "{env_model_path_pattern}"',
-        path_list,
-        index=len(path_list) - 1,
-    )
-    st.write(f'`{env_model_path}`')
+        st.write('## Select env model')
+        env_model_path_pattern = st.text_input(
+            'Env model path pattern', value='**//**/env_model*'
+        )
+        env_model_path_pattern = f'{env_model_path_pattern}.pth'
+        path_list = sorted(
+            Path(hydra.utils.get_original_cwd()).glob(env_model_path_pattern)
+        )
+        env_model_path = st.selectbox(
+            f'Select agent model path from "{env_model_path_pattern}"',
+            path_list,
+            index=len(path_list) - 1,
+        )
+        st.write(f'`{env_model_path}`')
 
-    with st.beta_expander("See yaml file"):
+    with st.beta_expander('Display yaml file'):
         yaml_path_pattern = st.text_input(
             'Yaml file path pattern', value='**//**/config'
         )
@@ -391,6 +392,14 @@ def main(config):
         ),
     )
 
+    st.sidebar.write('state[1]')
+    obs = env.trajectory['observation'][-1]
+    fig = plt.figure()
+    plt.imshow(obs[1].cpu().detach().numpy(), cmap='tab10', vmin=0, vmax=10)
+    plt.colorbar()
+    st.sidebar.pyplot(fig, True)
+    plt.close()
+
     st.sidebar.write('patch')
     for i in more_itertools.chunked(env.trajectory['patch'], 4):
         for col, image in zip(st.sidebar.beta_columns(4), list(i) + [None] * 3):
@@ -405,6 +414,7 @@ def main(config):
     likelihood_df = df[dataset.unique_alphabet]
     fig = plt.figure()
     plt.plot(
+        range(1, step + 1),
         likelihood_df[dataset.unique_alphabet[target]],
         color='black',
         marker='o',
@@ -415,14 +425,19 @@ def main(config):
         top_acc_label.extend(row.sort_values(ascending=False)[:2].index)
     display_label = sorted(set(top_acc_label) - {dataset.unique_alphabet[target]})
     for label in display_label:
-        plt.plot(likelihood_df[label], marker='.', label=label)
+        plt.plot(
+            range(1, step + 1),
+            likelihood_df[label],
+            marker='.',
+            label=label,
+        )
     plt.ylim([0, 1])
     plt.legend()
     st.sidebar.pyplot(fig, True)
 
     st.sidebar.write('loss')
     fig = plt.figure()
-    plt.plot(env.trajectory['loss'], marker='o', label='loss')
+    plt.plot(range(1, step + 1), env.trajectory['loss'], marker='o', label='loss')
     plt.hlines(
         [
             F.cross_entropy(
@@ -430,7 +445,8 @@ def main(config):
                 torch.tensor([target], dtype=torch.long),
             ).item()
         ],
-        *plt.xlim(),
+        1,
+        step,
         color='gray',
         linestyles='--',
     )
@@ -439,10 +455,10 @@ def main(config):
 
     st.sidebar.write('reward')
     fig = plt.figure()
-    plt.plot(env.trajectory['reward'], marker='o', label='reward')
+    plt.plot(range(1, step + 1), env.trajectory['reward'], marker='o', label='reward')
     plt.hlines(
         [0],
-        0,
+        1,
         step,
         color='gray',
         linestyles='--',
