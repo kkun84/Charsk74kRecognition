@@ -154,6 +154,14 @@ class PatchSetsClassificationEnv(gym.Env):
         observation = torch.cat([image, mask])
         return observation
 
+    @staticmethod
+    def convert_action(image_height: int, image_width: int, patch_size: Dict[str, int], action: int) -> Tuple[int, int]:
+        action_x = action % (image_width - patch_size['x'] + 1)
+        action_y = action // (image_width - patch_size['x'] + 1)
+        assert 0 <= action_x < image_width - patch_size['x'] + 1
+        assert 0 <= action_y < image_height - patch_size['y'] + 1
+        return action_x, action_y
+
     def reset(self, data_index: int = None) -> Tensor:
         device = self.env_model.device
         with torch.no_grad():
@@ -162,6 +170,8 @@ class PatchSetsClassificationEnv(gym.Env):
                 for i in [
                     'observation',
                     'action',
+                    'action_x',
+                    'action_y',
                     'patch',
                     'feature_set',
                     'output',
@@ -202,8 +212,9 @@ class PatchSetsClassificationEnv(gym.Env):
             image, target = self.data
 
             self.trajectory['action'].append(action)
-            action_x = action % (image.shape[2] - self.patch_size['x'] + 1)
-            action_y = action // (image.shape[2] - self.patch_size['y'] + 1)
+            action_x, action_y = PatchSetsClassificationEnv.convert_action(image.shape[1], image.shape[2], self.patch_size, action)
+            self.trajectory['action_x'].append(action_x)
+            self.trajectory['action_y'].append(action_y)
 
             if self.patch_type == 'patch':
                 patch = PatchSetsClassificationEnv.make_patch(
